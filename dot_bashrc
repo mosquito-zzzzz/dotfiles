@@ -1,0 +1,92 @@
+# .bashrc
+
+# Source global definitions
+if [ -f /etc/bashrc ]; then
+  . /etc/bashrc
+fi
+
+# User specific environment
+if ! [[ "$PATH" =~ "$HOME/.local/bin:$HOME/bin:" ]]; then
+  PATH="$HOME/.local/bin:$HOME/bin:$PATH"
+fi
+export PATH
+
+# Uncomment the following line if you don't like systemctl's auto-paging feature:
+# export SYSTEMD_PAGER=
+export PATH=$PATH:/usr/local/go/bin
+
+# User specific aliases and functions
+if [ -d ~/.bashrc.d ]; then
+  for rc in ~/.bashrc.d/*; do
+    if [ -f "$rc" ]; then
+      . "$rc"
+    fi
+  done
+fi
+unset rc
+
+# eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+# bash-completion activation
+if [ -f /usr/share/bash-completion/bash_completion ]; then
+  . /usr/share/bash-completion/bash_completion
+fi
+
+# Use bash-completion, if available
+[[ $PS1 && -f /usr/share/bash-completion/bash_completion ]] &&
+  . /usr/share/bash-completion/bash_completion
+
+# Source fzf key bindings and fuzzy auto-completion functions
+if [ -f ~/.fzf.bash ]; then
+  source ~/.fzf.bash
+fi
+bind '"\C-t": "fzf\n"' # Ctrl-T for file search
+bind '"\C-r": "fzf\n"' # Ctrl-R for history
+
+# This function does all the logic for Alt-C
+fzf_cd() {
+  local base
+
+  # 1. Environment detection (fast)
+  if grep -q '^name=fedora-toolbox' /run/.containerenv 2>/dev/null; then
+    base="/home/mosquito"
+  else
+    base="$HOME"
+  fi
+  [[ $PWD == / ]] && base=/
+
+  # 2. Fast directory listing with fd (parallelized)
+  local dir
+  dir="$(
+    fd -t d -H --max-depth=6 . "$base" 2>/dev/null |
+      sed "s|^$base|~|" |
+      fzf \
+        --border \
+        --algo=v2 \
+        --exact \
+        --tiebreak=begin \
+        --preview "echo {} | perl -pe 's|^~|$base|; s|\n||' | xargs -r ls -l | bat --color=always --terminal-width=\$FZF_PREVIEW_COLUMNS" \
+        --preview-window=right:50%:wrap \
+        --delimiter='~' \
+        --nth=2
+  )"
+
+  # 3. Instant path resolution (no perl/sed overhead)
+  [[ -z "$dir" ]] && return 1
+  printf "%q" "${dir/#\~/$base}"
+}
+
+bind '"\ec": "cd $(fzf_cd)\n"'
+
+# Alt-C for directories
+# bind '"\ec": "cd $(find ${PWD/#$HOME/~} -type d | fzf)\n"'
+
+# starship at the initialization of bash terminal
+eval "$(starship init bash)"
+
+# fd integration on fzf
+# Cache directory structure (optional)
+export FZF_DEFAULT_COMMAND='fd -t d -H --max-depth=6'
+export FZF_ALT_C_COMMAND="$FZF_DEFAULT_COMMAND"
+
+export BAT_THEME="zenburn" # Or any theme from `bat --list-themes`
